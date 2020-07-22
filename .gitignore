@@ -1,0 +1,6 @@
+odmb_firmware/*.aux
+odmb_firmware/*.bbl
+odmb_firmware/*.blg
+odmb_firmware/*.log
+odmb_firmware/*.out
+odmb_firmware/*.pdf
