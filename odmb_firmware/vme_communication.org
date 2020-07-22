@@ -1,0 +1,99 @@
+#+Title: Doc on VME Communication of the ODMB Firmware
+
+* Outline
+  - [[*VME simulation (vme_master.vhd)][VME simulation]]
+
+* Understand VME commands
+
+  Conclusion: 
+  - To pass in the command through VME master as addr (23:1)
+    - Append "A8" in front of the 16bit command string, omit the last bit
+    - e.g. 1020 will compose as "A81020" (omitting last bit)
+
+  - Small trick, defined Read if VME_DATA_IN = x"2EAD" instead of using the read bit
+
+** Command module
+
+ - Signals
+   - COMMAND : out (9:0)  <= ADRS_INNER(11 downto 2)
+     - ILD port map(ADRS_INNER(i), ADR(i), AS);
+   - ADRS    : out (17:2) <= ADRS_INNER(17 downto 2);
+   - AS      : in (1)  => vme_as_b => as
+
+
+* Siumations Realted for Firmware Development
+
+** VME simulation (vme_master.vhd)
+ - Important signals:
+   - vme_cmd     => vme_cmd   (shall be only on for the first time)
+   - vme_cmd_rd  => vme_cmd_rd,
+   - vme_wr      => vme_cmd  
+   - vme_addr    (in 23:1) <= test_controller <= vme_addr
+   - vme_wr_data (in 15:0)
+   - vme_rd      (in 1)  <= test_controller <= vme_cmd_reg(25)
+   - vme_rd_data (in 15:0)
+
+   - addr  (out 23:1) <= reg_addr <= vme_addr 
+     - only get updated when ad_load = '1'
+     - ad_load <= '1' only when VME_master in IDLE state and vme_cmd = '1'
+
+ - Need to make VME master return to IDLE state as fast as possible
+   - Next state is CMD --> will go to WR_BEGIN state if reg_wr = '1' or reg_rd = '1'
+     or else it will go back to IDLE state
+   - reg_wr <= vme_wr  updated at the same time with reg_addr 
+   - IACK will be issued in at WR_BEGIN state
+   - WR_BEGIN will go to next state after 8 clock cycles
+   - Program stuck at WR_DS_HIGH, can go to next step if dtack = '1' or 'H'
+   - DTACK is an input signal, that is set to 'H' in odmb_tb, and also go to odmb_top (inout)
+     - DTACK is also pullup in odmb_top 
+   - DTACK is an output signal from odmb_vme as  VME_DTACK_B <= not or_reduce(dtack_dev);
+     where dtack_dev(1) go to CFEBJTAG
+   - WR_DTACK_HIGH will eventually go to WR_END after 16 clock cycles
+     - At this stage, it will go back again to WR_BEGIN (unwanted) if vme_cmd and vme_wr = '1'
+     - The first WR_END is reached when input counter reach at least 0x50 
+       - Bottle neck: delayed by waiting for DTACK to be sent
+       - DTACK seems to be affected by when the VME_cmd changes?!!
+     - Need at least 100 cycles --> use full 7 bits to be safe safety
+
+** test_controller
+ - Summary:
+   - Process command read from file_handler and pass them to VME simulation, determine when to pass next one
+   - Not used now (in port testing)
+
+ - Signals
+   - mode (in 1) <= '1'   -- using mode 1
+
+   - vme_cmd_mem_out (in 31:0) => vme_cmd_reg  (from file_handler)
+   - vme_dat_mem_out (in 31:0) => vme_dat_reg_in (from file_handler)
+
+   - vme_addr    (out 23:1) <= vme_cmd_mem_out(23 downto 1); 
+   - vme_wr      (out 1)    <= vme_cmd_mem_out(24);
+   - vme_wr_data (out 15:0) <= vme_dat_mem_out(15 downto 0);
+   - vme_rd      (out 1)    <= vme_cmd_mem_out(25);
+
+   - vme_rd_data (in 15:0)
+
+   - vme_cmd    (out 1)  <= '1' when current_state is CMD_READ else '0'
+     - CMD_READ is the next state of IDLE when tc_enable = '1', which is always on
+     - Does this signal matter??
+   - vme_cmd_rd (in 1)
+
+** file_handler.v
+ - Summary: 
+   - To read predefined vme command from a file
+   - Not used now (in port testing)
+      
+ - Output:
+   - vme_cmd_reg    : out std_logic_vector(31 downto 0);
+   - vme_dat_reg_in : out std_logic_vector(31 downto 0);
+
+   r = $fscanf(infile,"%h %h",vme_cmd_reg,vme_dat_reg_in);
+   vme_instruction = vme_cmd_reg[15:0];
+   vme_cmd_reg = vme_cmd_reg | mask(32'h00a80000) ;
+   if (command == "R" || command == "r")
+     vme_cmd_reg[25] = 1'b1;
+   else
+     vme_cmd_reg[24] = 1'b1;
+   read_cmd = vme_cmd_reg[25];
+   write_data = vme_dat_reg_in[15:0];
+
