@@ -374,6 +374,19 @@ The controller operates the TCK clock and the modules being controlled respond b
 
 \section{General Notes on Hardware and Firmware}
 
+In general, it best to use synchronous logic where ever possible as asynchronous logic is more prone to strange behavior and is more difficult to debug. In particular, it is useful to make all VHDL processes of the form
+
+\begin{listing}
+process_name : process(CLK)
+begin
+if rising_edge(CLK) then
+  --internal logic here
+end if;
+end process;
+\end{listing}
+
+In this way, it is clearer how this should be implemented on the FPGA (flip-flop + LUT).
+
 \section{ODMB Hardware}
 
 \section{ODMB Firmware}
@@ -913,6 +926,29 @@ The VME simulation is described by the state machine in figure \ref{fig:vmestate
 %	ila_CmdIndex, ila_rdAddr, ila_wdlimit, vio_reset
 
 %
-
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|} \hline
+Port& Description\\ \hline
+\texttt{CLK}& 40MHz clock\\ \hline
+\texttt{RST}& reset signal input from top level\\ \hline
+\texttt{BPI\_BANK\_BLOCK}& block where registers are stored, 0x0FF7 for CFG and 0x0FD7 for CONST\\ \hline
+\texttt{BPI\_CFG\_REG\_WE\_O}& signal to indicate write to CFG registers to\\
+                             & \texttt{CC\_CFG\_REG\_WE} on VMECONFREGS\\ \hline
+\texttt{BPI\_CFG\_REGS}& value of CFG registers from VMECONFREGS\\ \hline
+\texttt{BPI\_CFG\_DL\_START}& signal to download CFG registers from BPI\_PORT\\ \hline
+\texttt{BPI\_CFG\_UL\_START}& signal to upload CFG registers from BPI\_PORT\\ \hline
+\texttt{BPI\_DONE}& done signal from BPI\_CTRL\\ \hline
+\texttt{BPI\_STATUS}& status from BPI\_CTRL\\ \hline
+\texttt{BPI\_DIS}& multiplexed with disable signal from BPI\_PORT and sent to BPI\_CTRL\\ \hline
+\texttt{BPI\_EN}& multiplexed with enable signal from BPI\_PORT and sent to BPI\_CTRL\\ \hline
+\texttt{BPI\_CFG\_REG\_WE\_I}& write enable input from BPI\_CTRL\\ \hline
+\texttt{BPI\_CFG\_BUSY}& output indicating busy to BPI\_PORT and VMECONFREGS\\ \hline
+\texttt{BPI\_CMD\_FIFO\_WE}& multiplexed with write enable from BPI\_PORT and sent to BPI\_CTRL\\ \hline
+\texttt{BPI\_CMD\_FIFO\_IN}& multiplexed with fifo data from BPI\_PORT and sent to BPI\_CTRL\\ \hline
+\end{tabular}
+\caption{Signals on BPI\_CFG\_CONTROLLER module}
+\label{tab:cfgcontrollerinterface}
+\end{table}
 
 \end{document}
